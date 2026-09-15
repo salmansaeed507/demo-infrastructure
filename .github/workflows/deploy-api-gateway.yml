@@ -15,7 +15,7 @@ permissions:
 
 env:
   IMAGE: demo-api-gateway
-  COMPOSE_DIR: /opt/demo
+  COMPOSE_DIR: /var/www/compose
 
 jobs:
   deploy:
