@@ -1,0 +1,129 @@
+name: Deploy API Gateway
+
+on:
+  repository_dispatch:
+    types: [deploy-api-gateway]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: api-gateway git ref (branch, tag, or SHA)
+        required: false
+        default: main
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: demo-api-gateway
+  COMPOSE_DIR: /opt/demo
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve api-gateway ref
+        id: ref
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "value=${{ github.event.client_payload.ref || 'main' }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout infrastructure
+        uses: actions/checkout@v4
+
+      - name: Checkout api-gateway
+        uses: actions/checkout@v4
+        with:
+          repository: salmansaeed507/demo-api-gateway
+          ref: ${{ steps.ref.outputs.value }}
+          path: api-gateway
+
+      - name: Set image tag
+        id: tag
+        run: |
+          REF="${{ steps.ref.outputs.value }}"
+          if [[ "$REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "value=${REF:0:12}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${REF//\//-}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build image and save tarball
+        working-directory: api-gateway
+        run: |
+          TAG="${{ steps.tag.outputs.value }}"
+          docker build \
+            -t "${{ env.IMAGE }}:${TAG}" \
+            -t "${{ env.IMAGE }}:latest" \
+            .
+          docker save \
+            "${{ env.IMAGE }}:${TAG}" \
+            "${{ env.IMAGE }}:latest" \
+            | gzip > ../api-gateway-image.tar.gz
+
+      - name: Ensure compose dir on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: mkdir -p ${{ env.COMPOSE_DIR }}
+
+      - name: Upload compose files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          source: compose/docker-compose.yml,compose/.env.example
+          target: ${{ env.COMPOSE_DIR }}
+          strip_components: 1
+
+      - name: Upload image tarball
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          source: api-gateway-image.tar.gz
+          target: ${{ env.COMPOSE_DIR }}
+
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          envs: LOGIN_TOKEN,POSTGRES_PASSWORD,IMAGE_TAG
+          script: |
+            set -euo pipefail
+            cd ${{ env.COMPOSE_DIR }}
+
+            if [ ! -f .env ]; then
+              cp .env.example .env
+            fi
+
+            if [ -n "${LOGIN_TOKEN:-}" ]; then
+              sed -i "s|^LOGIN_TOKEN=.*|LOGIN_TOKEN=${LOGIN_TOKEN}|" .env
+            fi
+            if [ -n "${POSTGRES_PASSWORD:-}" ]; then
+              sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${POSTGRES_PASSWORD}|" .env
+              sed -i "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/demo|" .env
+            fi
+            sed -i "s|^API_GATEWAY_TAG=.*|API_GATEWAY_TAG=${IMAGE_TAG}|" .env
+
+            gunzip -c api-gateway-image.tar.gz | docker load
+            rm -f api-gateway-image.tar.gz
+
+            docker compose pull postgres redis
+            docker compose up -d postgres redis api-gateway
+        env:
+          LOGIN_TOKEN: ${{ secrets.LOGIN_TOKEN }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          IMAGE_TAG: ${{ steps.tag.outputs.value }}
