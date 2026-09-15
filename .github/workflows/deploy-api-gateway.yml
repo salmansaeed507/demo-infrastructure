@@ -118,7 +118,7 @@ jobs:
             fi
             sed -i "s|^API_GATEWAY_TAG=.*|API_GATEWAY_TAG=${IMAGE_TAG}|" .env
 
-            gunzip -c api-gateway-image.tar.gz | sudo docker load
+            gunzip -c api-gateway-image.tar.gz | docker load
             rm -f api-gateway-image.tar.gz
 
             docker compose pull postgres redis
