@@ -122,7 +122,9 @@ jobs:
             rm -f api-gateway-image.tar.gz
 
             docker compose pull postgres redis
-            docker compose up -d postgres redis api-gateway
+            docker compose up -d postgres redis
+            docker compose run --rm api-gateway alembic upgrade head
+            docker compose up -d api-gateway
         env:
           LOGIN_TOKEN: ${{ secrets.LOGIN_TOKEN }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
