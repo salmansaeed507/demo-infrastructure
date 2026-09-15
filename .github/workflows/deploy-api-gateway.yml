@@ -118,11 +118,11 @@ jobs:
             fi
             sed -i "s|^API_GATEWAY_TAG=.*|API_GATEWAY_TAG=${IMAGE_TAG}|" .env
 
-            gunzip -c api-gateway-image.tar.gz | docker load
+            gunzip -c api-gateway-image.tar.gz | sudo docker load
             rm -f api-gateway-image.tar.gz
 
-            docker compose pull postgres redis
-            docker compose up -d postgres redis api-gateway
+            sudo docker compose pull postgres redis
+            sudo docker compose up -d postgres redis api-gateway
         env:
           LOGIN_TOKEN: ${{ secrets.LOGIN_TOKEN }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
