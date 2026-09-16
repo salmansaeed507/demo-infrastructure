@@ -1,33 +1,36 @@
 # infrastructure
 
-Production/VPS orchestration for the multi-service demo.
+VPS deploy for the multi-service demo. App repos stay separate; this repo owns Compose and GitHub Actions.
 
-Repos are public — no token is needed to clone `demo-frontend`.
+## Stack
 
-## Frontend deploy (central dispatch)
+`compose/docker-compose.yml` runs on the VPS at `/var/www/compose`:
 
-`frontend` only sends a `repository_dispatch` event. Build and VPS publish run here.
+- **postgres**, **redis** — pulled from Docker Hub
+- **api-gateway** — image built in CI, loaded on the VPS (`docker save` / `docker load`, no registry)
 
-### Secrets on this repo (`demo-infrastructure`)
+Frontend is a static build published to `/var/www/demo` (not Compose).
 
-| Secret | Purpose |
+## Deploy
+
+App repos dispatch here (`repository_dispatch`). You can also run workflows manually in Actions.
+
+| Workflow | What it does |
 |---|---|
-| `VITE_API_URL` | Frontend build-time API base URL |
-| `VITE_API_KEY` | Frontend build-time API key |
-| `VPS_HOST` | VPS hostname/IP |
-| `VPS_USER` | SSH user |
-| `VPS_SSH_KEY` | Private SSH key for the VPS |
+| **Deploy API Gateway** | Build image → upload to VPS → start postgres/redis → `alembic upgrade head` → start api-gateway |
+| **Deploy Frontend** | `npm run build` → rsync `dist/` to `/var/www/demo` |
 
-### Secret on `demo-frontend`
+VPS SSH user needs Docker access (`docker` group or equivalent).
 
-| Secret | Purpose |
+## Secrets (`demo-infrastructure`)
+
+| Secret | Used by |
 |---|---|
-| `INFRA_DISPATCH_PAT` | PAT that can create `repository_dispatch` on this repo. For public repos, classic PAT with `public_repo` is enough (or a fine-grained PAT with access to `demo-infrastructure` and permission to trigger workflows). |
+| `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` | Both deploys |
+| `LOGIN_TOKEN`, `POSTGRES_PASSWORD` | API gateway `.env` on VPS |
+| `VITE_API_URL`, `VITE_API_KEY` | Frontend build |
 
-`GITHUB_TOKEN` from the frontend workflow cannot dispatch to another repo — a PAT is still required even when both repos are public.
+On `demo-frontend` / `demo-api-gateway`: `INFRA_DISPATCH_PAT` (PAT that can dispatch to this repo).
 
-Remove old deploy secrets (`VITE_*`, `VPS_*`) from `demo-frontend` once this is live — they belong only here.
 
-### Manual run
 
-Actions → **Deploy Frontend** → Run workflow (optional `ref`, default `main`).
