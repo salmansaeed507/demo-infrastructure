@@ -38,6 +38,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       LOGIN_TOKEN: ${LOGIN_TOKEN:?LOGIN_TOKEN is required}
       SESSION_IDLE_SECONDS: ${SESSION_IDLE_SECONDS:-86400}
+      PURGE_INACTIVE_SESSIONS_CRON: ${PURGE_INACTIVE_SESSIONS_CRON:-0 */2 * * *}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://demo.salmansaeed507.com}
       CUSTOMER_SUPPORT_URL: ${CUSTOMER_SUPPORT_URL:-http://customer-support-agent:8000}
       LEAD_QUALIFICATION_URL: ${LEAD_QUALIFICATION_URL:-http://lead-qualification-system:8000}
