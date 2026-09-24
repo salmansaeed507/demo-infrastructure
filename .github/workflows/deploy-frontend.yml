@@ -39,7 +39,8 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_API_GATEWAY_URL: ${{ secrets.VITE_API_GATEWAY_URL }}
+          VITE_CUSTOMER_SUPPORT_API_URL: ${{ secrets.VITE_CUSTOMER_SUPPORT_API_URL }}
           VITE_API_KEY: ${{ secrets.VITE_API_KEY }}
 
       - name: Ensure web root exists
