@@ -43,6 +43,8 @@ services:
       CUSTOMER_SUPPORT_URL: ${CUSTOMER_SUPPORT_URL:-http://customer-support-agent:8000}
       LEAD_QUALIFICATION_URL: ${LEAD_QUALIFICATION_URL:-http://lead-qualification-system:8000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:?RUSTFS_ACCESS_KEY is required}
+      AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:?RUSTFS_SECRET_KEY is required}
     ports:
       - "${API_GATEWAY_PORT:-5070}:5070"
 
