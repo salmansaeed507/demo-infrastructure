@@ -109,6 +109,9 @@ jobs:
               cp .env.example .env
             fi
 
+            grep -q '^RUSTFS_ACCESS_KEY=' .env || echo 'RUSTFS_ACCESS_KEY=' >> .env
+            grep -q '^RUSTFS_SECRET_KEY=' .env || echo 'RUSTFS_SECRET_KEY=' >> .env
+
             if [ -n "${LOGIN_TOKEN:-}" ]; then
               sed -i "s|^LOGIN_TOKEN=.*|LOGIN_TOKEN=${LOGIN_TOKEN}|" .env
             fi
@@ -127,8 +130,9 @@ jobs:
             gunzip -c api-gateway-image.tar.gz | docker load
             rm -f api-gateway-image.tar.gz
 
-            docker compose pull postgres redis
-            docker compose up -d postgres redis
+            mkdir -p /srv/rustfs/data
+            docker compose pull postgres redis rustfs
+            docker compose up -d postgres redis rustfs
             docker compose run --rm api-gateway alembic upgrade head
             docker compose up -d api-gateway
         env:

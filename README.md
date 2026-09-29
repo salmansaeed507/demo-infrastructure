@@ -6,7 +6,7 @@ VPS deploy for the multi-service demo. App repos stay separate; this repo owns C
 
 `compose/docker-compose.yml` runs on the VPS at `/var/www/compose`:
 
-- **postgres**, **redis** — pulled from Docker Hub
+- **postgres**, **redis**, **rustfs** — pulled from Docker Hub
 - **api-gateway**, **customer-support-agent** — images built in CI, loaded on the VPS (`docker save` / `docker load`, no registry)
 
 Frontend is a static build published to `/var/www/demo` (not Compose).
@@ -17,7 +17,7 @@ App repos dispatch here (`repository_dispatch`). You can also run workflows manu
 
 | Workflow | What it does |
 |---|---|
-| **Deploy API Gateway** | Build image → upload to VPS → start postgres/redis → `alembic upgrade head` → start api-gateway |
+| **Deploy API Gateway** | Build image → upload to VPS → start postgres/redis/rustfs → `alembic upgrade head` → start api-gateway |
 | **Deploy Customer Support Agent** | Build image → upload to VPS → start postgres → `alembic upgrade head` → start customer-support-agent |
 | **Deploy Frontend** | `npm run build` → rsync `dist/` to `/var/www/demo` |
 
