@@ -100,7 +100,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
-          envs: LOGIN_TOKEN,POSTGRES_PASSWORD,IMAGE_TAG
+          envs: LOGIN_TOKEN,POSTGRES_PASSWORD,RUSTFS_ACCESS_KEY,RUSTFS_SECRET_KEY,IMAGE_TAG
           script: |
             set -euo pipefail
             cd ${{ env.COMPOSE_DIR }}
@@ -116,6 +116,12 @@ jobs:
               sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${POSTGRES_PASSWORD}|" .env
               sed -i "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/demo|" .env
             fi
+            if [ -n "${RUSTFS_ACCESS_KEY:-}" ]; then
+              sed -i "s|^RUSTFS_ACCESS_KEY=.*|RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}|" .env
+            fi
+            if [ -n "${RUSTFS_SECRET_KEY:-}" ]; then
+              sed -i "s|^RUSTFS_SECRET_KEY=.*|RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}|" .env
+            fi
             sed -i "s|^API_GATEWAY_TAG=.*|API_GATEWAY_TAG=${IMAGE_TAG}|" .env
 
             gunzip -c api-gateway-image.tar.gz | docker load
@@ -128,4 +134,6 @@ jobs:
         env:
           LOGIN_TOKEN: ${{ secrets.LOGIN_TOKEN }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          RUSTFS_ACCESS_KEY: ${{ secrets.RUSTFS_ACCESS_KEY }}
+          RUSTFS_SECRET_KEY: ${{ secrets.RUSTFS_SECRET_KEY }}
           IMAGE_TAG: ${{ steps.tag.outputs.value }}
