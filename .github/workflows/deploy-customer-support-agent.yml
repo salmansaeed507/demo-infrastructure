@@ -40,6 +40,18 @@ jobs:
           ref: ${{ steps.ref.outputs.value }}
           path: customer-support-agent
 
+      - name: Checkout api-gateway (for common/)
+        uses: actions/checkout@v4
+        with:
+          repository: salmansaeed507/demo-api-gateway
+          ref: main
+          path: api-gateway
+
+      - name: Use common from api-gateway
+        run: |
+          rm -rf customer-support-agent/common
+          cp -a api-gateway/common customer-support-agent/common
+
       - name: Set image tag
         id: tag
         run: |
