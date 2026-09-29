@@ -9,12 +9,17 @@ on:
         description: api-gateway git ref (branch, tag, or SHA)
         required: false
         default: main
+      csa_ref:
+        description: customer-support-agent git ref (branch, tag, or SHA)
+        required: false
+        default: main
 
 permissions:
   contents: read
 
 env:
-  IMAGE: demo-api-gateway
+  API_GATEWAY_IMAGE: demo-api-gateway
+  CSA_IMAGE: demo-customer-support-agent
   COMPOSE_DIR: /var/www/compose
 
 jobs:
@@ -30,6 +35,15 @@ jobs:
             echo "value=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Resolve customer-support-agent ref
+        id: csa_ref
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "value=${{ github.event.client_payload.csa_ref || 'main' }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ inputs.csa_ref }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout infrastructure
         uses: actions/checkout@v4
 
@@ -40,28 +54,58 @@ jobs:
           ref: ${{ steps.ref.outputs.value }}
           path: api-gateway
 
-      - name: Set image tag
+      - name: Checkout customer-support-agent
+        uses: actions/checkout@v4
+        with:
+          repository: salmansaeed507/demo-customer-support-agent
+          ref: ${{ steps.csa_ref.outputs.value }}
+          path: customer-support-agent
+
+      - name: Set image tags
         id: tag
         run: |
           REF="${{ steps.ref.outputs.value }}"
           if [[ "$REF" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "value=${REF:0:12}" >> "$GITHUB_OUTPUT"
+            echo "api_gateway=${REF:0:12}" >> "$GITHUB_OUTPUT"
           else
-            echo "value=${REF//\//-}" >> "$GITHUB_OUTPUT"
+            echo "api_gateway=${REF//\//-}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build image and save tarball
+          CSA_REF="${{ steps.csa_ref.outputs.value }}"
+          if [[ "$CSA_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "csa=${CSA_REF:0:12}" >> "$GITHUB_OUTPUT"
+          else
+            echo "csa=${CSA_REF//\//-}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Copy common module to customer-support-agent
+        run: cp -r api-gateway/common customer-support-agent/
+
+      - name: Build api-gateway image
         working-directory: api-gateway
         run: |
-          TAG="${{ steps.tag.outputs.value }}"
+          TAG="${{ steps.tag.outputs.api_gateway }}"
           docker build \
-            -t "${{ env.IMAGE }}:${TAG}" \
-            -t "${{ env.IMAGE }}:latest" \
+            -t "${{ env.API_GATEWAY_IMAGE }}:${TAG}" \
+            -t "${{ env.API_GATEWAY_IMAGE }}:latest" \
             .
           docker save \
-            "${{ env.IMAGE }}:${TAG}" \
-            "${{ env.IMAGE }}:latest" \
+            "${{ env.API_GATEWAY_IMAGE }}:${TAG}" \
+            "${{ env.API_GATEWAY_IMAGE }}:latest" \
             | gzip > ../api-gateway-image.tar.gz
+
+      - name: Build customer-support-agent image
+        working-directory: customer-support-agent
+        run: |
+          TAG="${{ steps.tag.outputs.csa }}"
+          docker build \
+            -t "${{ env.CSA_IMAGE }}:${TAG}" \
+            -t "${{ env.CSA_IMAGE }}:latest" \
+            .
+          docker save \
+            "${{ env.CSA_IMAGE }}:${TAG}" \
+            "${{ env.CSA_IMAGE }}:latest" \
+            | gzip > ../csa-image.tar.gz
 
       - name: Ensure compose dir on VPS
         uses: appleboy/ssh-action@v1.2.0
@@ -83,14 +127,14 @@ jobs:
           target: ${{ env.COMPOSE_DIR }}
           strip_components: 1
 
-      - name: Upload image tarball
+      - name: Upload image tarballs
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
-          source: api-gateway-image.tar.gz
+          source: api-gateway-image.tar.gz,csa-image.tar.gz
           target: ${{ env.COMPOSE_DIR }}
 
       - name: Deploy on VPS
@@ -100,7 +144,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
-          envs: LOGIN_TOKEN,POSTGRES_PASSWORD,IMAGE_TAG
+          envs: LOGIN_TOKEN,POSTGRES_PASSWORD,API_GATEWAY_TAG,CSA_TAG
           script: |
             set -euo pipefail
             cd ${{ env.COMPOSE_DIR }}
@@ -116,16 +160,20 @@ jobs:
               sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${POSTGRES_PASSWORD}|" .env
               sed -i "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/demo|" .env
             fi
-            sed -i "s|^API_GATEWAY_TAG=.*|API_GATEWAY_TAG=${IMAGE_TAG}|" .env
+            sed -i "s|^API_GATEWAY_TAG=.*|API_GATEWAY_TAG=${API_GATEWAY_TAG}|" .env
+            sed -i "s|^CUSTOMER_SUPPORT_TAG=.*|CUSTOMER_SUPPORT_TAG=${CSA_TAG}|" .env
 
             gunzip -c api-gateway-image.tar.gz | docker load
-            rm -f api-gateway-image.tar.gz
+            gunzip -c csa-image.tar.gz | docker load
+            rm -f api-gateway-image.tar.gz csa-image.tar.gz
 
             docker compose pull postgres redis
             docker compose up -d postgres redis
+            docker compose run --rm customer-support-agent alembic upgrade head
             docker compose run --rm api-gateway alembic upgrade head
-            docker compose up -d api-gateway
+            docker compose up -d customer-support-agent api-gateway
         env:
           LOGIN_TOKEN: ${{ secrets.LOGIN_TOKEN }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          IMAGE_TAG: ${{ steps.tag.outputs.value }}
+          API_GATEWAY_TAG: ${{ steps.tag.outputs.api_gateway }}
+          CSA_TAG: ${{ steps.tag.outputs.csa }}
