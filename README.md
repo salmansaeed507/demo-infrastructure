@@ -6,7 +6,7 @@ VPS deploy for the multi-service demo. App repos stay separate; this repo owns C
 
 `compose/docker-compose.yml` runs on the VPS at `/var/www/compose`:
 
-- **postgres**, **redis**, **rustfs** — pulled from Docker Hub
+- **postgres** (`pgvector/pgvector:pg16`), **redis**, **rustfs** — pulled from Docker Hub
 - **api-gateway**, **customer-support-agent** — images built in CI, loaded on the VPS (`docker save` / `docker load`, no registry)
 
 Frontend is a static build published to `/var/www/demo` (not Compose).

@@ -130,10 +130,10 @@ jobs:
             gunzip -c customer-support-agent-image.tar.gz | docker load
             rm -f customer-support-agent-image.tar.gz
 
-            docker compose pull postgres
-            docker compose up -d postgres
+            docker compose pull postgres redis
+            docker compose up -d postgres redis
             docker compose run --rm customer-support-agent alembic upgrade head
-            docker compose up -d customer-support-agent
+            docker compose up -d customer-support-agent customer-support-rag-worker
         env:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           IMAGE_TAG: ${{ steps.tag.outputs.value }}

@@ -1,13 +1,35 @@
 name: demo
 
+# Shared by the API and the RAG worker (same image, different command).
+x-customer-support-service: &customer-support-service
+  image: demo-customer-support-agent:${CUSTOMER_SUPPORT_TAG:-latest}
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  environment:
+    DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/demo}
+    REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    LLM_MODEL: ${LLM_MODEL:-gpt-5.4-mini}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:?RUSTFS_ACCESS_KEY is required}
+    AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:?RUSTFS_SECRET_KEY is required}
+    S3_BUCKET: ${S3_BUCKET:-}
+    S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-demo}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -51,18 +73,11 @@ services:
       - "${API_GATEWAY_PORT:-5070}:5070"
 
   customer-support-agent:
-    image: demo-customer-support-agent:${CUSTOMER_SUPPORT_TAG:-latest}
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/demo}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:?RUSTFS_ACCESS_KEY is required}
-      AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:?RUSTFS_SECRET_KEY is required}
-      S3_BUCKET: ${S3_BUCKET:-}
-      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+    <<: *customer-support-service
+
+  customer-support-rag-worker:
+    <<: *customer-support-service
+    command: ["arq", "src.rag.worker.WorkerSettings"]
 
   rustfs:
     image: rustfs/rustfs:latest
